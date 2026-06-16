@@ -17,8 +17,16 @@ class AuthRepository {
 
   /// Check if the user has already configured a PIN.
   Future<bool> isPinSetup() async {
-    final setup = await _secureStorage.read(key: _pinSetupKey);
-    return setup == 'true';
+    try {
+      final setup = await _secureStorage.read(key: _pinSetupKey);
+      return setup == 'true';
+    } catch (e) {
+      // Clear corrupt secure storage (usually caused by Android backup restore key loss)
+      try {
+        await _secureStorage.deleteAll();
+      } catch (_) {}
+      return false;
+    }
   }
 
   /// Registers a new PIN in the system secure storage.
@@ -45,12 +53,23 @@ class AuthRepository {
     final enteredPinHash = sha256.convert(pinBytes).toString();
 
     // Check secure storage for generated DB key & PIN hash
-    String? storedDbPass = await _secureStorage.read(key: _dbKeyName);
-    String? storedPinHash = await _secureStorage.read(key: _pinHashName);
+    String? storedDbPass;
+    String? storedPinHash;
+    try {
+      storedDbPass = await _secureStorage.read(key: _dbKeyName);
+      storedPinHash = await _secureStorage.read(key: _pinHashName);
+    } catch (e) {
+      // Force clean setup if decryption fails
+      try {
+        await _secureStorage.deleteAll();
+      } catch (_) {}
+      storedDbPass = null;
+      storedPinHash = null;
+    }
 
     if (storedDbPass == null || storedPinHash == null) {
-      // Clear any orphaned database/journal/WAL/shm/error files to prevent decryption failures
-      for (final ext in ['', '-journal', '-wal', '-shm', '.init_err']) {
+      // Clear any orphaned database/journal/WAL/shm/error/log files to prevent decryption failures
+      for (final ext in ['', '-journal', '-wal', '-shm', '.init_err', '.log_err', '_engine.log']) {
         final f = File('$dbPath$ext');
         if (await f.exists()) {
           try {
@@ -84,12 +103,28 @@ class AuthRepository {
     } else {
       // Check for specific initialization error written by Go engine
       final errFile = File('$dbPath.init_err');
+      String? details;
       if (await errFile.exists()) {
-        final errText = await errFile.readAsString();
+        details = await errFile.readAsString();
         try {
           await errFile.delete();
         } catch (_) {}
-        throw Exception(errText);
+      }
+
+      // Read the engine log file for diagnostic info
+      final logFile = File(p.join(appDocDir.path, 'torbi_engine.log'));
+      String logTail = '';
+      if (await logFile.exists()) {
+        try {
+          final lines = await logFile.readAsLines();
+          logTail = lines.skip(lines.length > 10 ? lines.length - 10 : 0).join('\n');
+        } catch (_) {}
+      }
+
+      if (details != null) {
+        throw Exception('$details\nLogs:\n$logTail');
+      } else if (logTail.isNotEmpty) {
+        throw Exception('Engine start failed. Logs:\n$logTail');
       }
       throw Exception('Failed to start engine (port: $apiPort)');
     }

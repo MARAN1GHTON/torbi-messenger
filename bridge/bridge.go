@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -72,6 +73,15 @@ func StartEngineGo(dbPath, dbPass string, libp2pPort int) int {
 	// If engine is already running, return the active port
 	if httpServer != nil {
 		return apiPort
+	}
+
+	// Redirect logging to a file in the same directory as the DB
+	dir := filepath.Dir(dbPath)
+	_ = os.MkdirAll(dir, 0755)
+	logFile, logErr := os.OpenFile(filepath.Join(dir, "torbi_engine.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if logErr == nil {
+		log.SetOutput(logFile)
+		log.Println("[Bridge] Redirected Go log output to file")
 	}
 
 	log.Printf("[Bridge] Starting Torbi Go Engine (DB: %s, NetPort: %d)\n", dbPath, libp2pPort)
