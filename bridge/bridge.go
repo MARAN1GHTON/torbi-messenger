@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -79,6 +80,7 @@ func StartEngineGo(dbPath, dbPass string, libp2pPort int) int {
 	db, err := database.InitDB(dbPath, dbPass)
 	if err != nil {
 		log.Printf("[Bridge] Database initialization failed: %v\n", err)
+		os.WriteFile(dbPath+".init_err", []byte(err.Error()), 0644)
 		return -1
 	}
 	dbInstance = db
@@ -89,6 +91,7 @@ func StartEngineGo(dbPath, dbPass string, libp2pPort int) int {
 		db.Close()
 		dbInstance = nil
 		log.Printf("[Bridge] Network manager initialization failed: %v\n", err)
+		os.WriteFile(dbPath+".init_err", []byte(err.Error()), 0644)
 		return -1
 	}
 	netManager = nm

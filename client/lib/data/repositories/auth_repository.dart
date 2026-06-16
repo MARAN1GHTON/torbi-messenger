@@ -37,6 +37,7 @@ class AuthRepository {
   Future<int> unlockAndStart(String pin, {int networkPort = 10001}) async {
     // 1. Get documents directory
     final Directory appDocDir = await getApplicationDocumentsDirectory();
+    await appDocDir.create(recursive: true);
     final String dbPath = p.join(appDocDir.path, 'torbi.db');
 
     // Calculate PIN hash
@@ -48,6 +49,16 @@ class AuthRepository {
     String? storedPinHash = await _secureStorage.read(key: _pinHashName);
 
     if (storedDbPass == null || storedPinHash == null) {
+      // Clear any orphaned database/journal/WAL/shm/error files to prevent decryption failures
+      for (final ext in ['', '-journal', '-wal', '-shm', '.init_err']) {
+        final f = File('$dbPath$ext');
+        if (await f.exists()) {
+          try {
+            await f.delete();
+          } catch (_) {}
+        }
+      }
+
       // First-time setup: Generate database password and register PIN hash
       storedDbPass = _generateRandomKey();
       storedPinHash = enteredPinHash;
@@ -70,6 +81,17 @@ class AuthRepository {
       
       // Save setup flag on success
       await setupPin(pin);
+    } else {
+      // Check for specific initialization error written by Go engine
+      final errFile = File('$dbPath.init_err');
+      if (await errFile.exists()) {
+        final errText = await errFile.readAsString();
+        try {
+          await errFile.delete();
+        } catch (_) {}
+        throw Exception(errText);
+      }
+      throw Exception('Failed to start engine (port: $apiPort)');
     }
     
     return apiPort;

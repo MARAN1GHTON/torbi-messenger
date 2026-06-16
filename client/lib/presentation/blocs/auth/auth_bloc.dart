@@ -68,7 +68,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           emit(AuthError('Failed to initialize and encrypt the database.'));
         }
       } catch (e) {
-        emit(AuthError('Failed during first-time setup: $e'));
+        final msg = e.toString().replaceAll('Exception: ', '');
+        emit(AuthError('Setup failed: $msg'));
       }
     });
 
@@ -82,7 +83,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           emit(AuthError('Invalid PIN code. Please try again.'));
         }
       } catch (e) {
-        emit(AuthError('Unlock error: $e'));
+        final msg = e.toString().replaceAll('Exception: ', '');
+        if (msg.contains('invalid database password')) {
+          emit(AuthError('Invalid PIN code. Please try again.'));
+        } else {
+          emit(AuthError('Unlock error: $msg'));
+        }
       }
     });
 

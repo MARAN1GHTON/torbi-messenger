@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 
 	_ "github.com/mutecomm/go-sqlcipher/v4"
 )
@@ -15,6 +17,12 @@ type DB struct {
 
 // InitDB opens the database file using SQLCipher with the provided password.
 func InitDB(dbPath, password string) (*DB, error) {
+	// Ensure parent directory exists
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %w", err)
+	}
+
 	key := url.QueryEscape(password)
 	dsn := fmt.Sprintf("file:%s?_pragma_key=%s&_pragma_cipher_page_size=4096", dbPath, key)
 
