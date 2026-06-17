@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/repositories/network_repository.dart';
@@ -62,9 +63,36 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       emit(SettingsLoading());
       try {
         final status = await _networkRepository.getNodeStatus();
-        final addrs = (status['listen_addresses'] as List<dynamic>?)
+        final rawAddrs = (status['listen_addresses'] as List<dynamic>?)
             ?.map((e) => e.toString())
             .toList() ?? [];
+
+        final List<String> addrs = [];
+        final List<String> deviceIps = [];
+        try {
+          final interfaces = await NetworkInterface.list(
+            includeLoopback: false,
+            type: InternetAddressType.IPv4,
+          );
+          for (final interface in interfaces) {
+            for (final addr in interface.addresses) {
+              if (addr.address != '127.0.0.1' && !addr.address.startsWith('169.254')) {
+                deviceIps.add(addr.address);
+              }
+            }
+          }
+        } catch (_) {}
+
+        for (final rawAddr in rawAddrs) {
+          if (rawAddr.contains('/ip4/127.0.0.1/')) {
+            addrs.add(rawAddr); // Keep loopback
+            for (final ip in deviceIps) {
+              addrs.add(rawAddr.replaceAll('127.0.0.1', ip));
+            }
+          } else {
+            addrs.add(rawAddr);
+          }
+        }
 
         emit(SettingsLoaded(
           peerId: status['peer_id'] as String? ?? 'Unknown',

@@ -25,6 +25,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _manualConnect() {
     final addr = _connectController.text.trim();
     if (addr.isNotEmpty) {
+      if (!addr.startsWith('/')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Please enter a full multiaddress starting with "/" (copy from "MY LISTEN MULTIADDRESSES" on the other phone), not just the PeerID.',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: PremiumTheme.errorRed,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
       context.read<SettingsBloc>().add(ConnectToPeerEvent(addr));
     }
   }
